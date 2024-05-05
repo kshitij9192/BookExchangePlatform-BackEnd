@@ -183,8 +183,9 @@ app.get('/:username/sent-requests', async (req, res) => {
 
     try {
         // Retrieve requester ID based on requester username
-        const requesterId = await getUserIdByUsername(requesterUsername);
-        if (!requesterId) {
+        const requester_id = await getUserIdByUsername(requesterUsername);
+        console.log('requeterId: ',requester_id);
+        if (!requester_id) {
             return res.status(404).json({ error: 'Requester not found' });
         }
 
@@ -195,7 +196,7 @@ app.get('/:username/sent-requests', async (req, res) => {
             INNER JOIN books ON exchange_requests.book_id = books.id
             WHERE exchange_requests.requester_id = $1;
         `;
-        const result = await client.query(query, [requesterId]);
+        const result = await client.query(query, [requester_id]);
         const books = result.rows;
 
         if (books.length === 0) {
@@ -239,6 +240,42 @@ app.get('/:username/received-requests', async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
+// Combined API endpoint to update exchange request status and book status
+app.put('/:username/update-request-and-book-status', async (req, res) => {
+    const username = req.params.username;
+    const { request_id, status } = req.body; // Assuming the request body includes requestId and status
+
+    try {
+        // Get lender ID based on username
+        const lenderId = await getUserIdByUsername(username);
+        if (!lenderId) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Update exchange request status
+        const updateRequestResult = await client.query('UPDATE exchange_requests SET status = $1 WHERE request_id = $2 AND lender_id = $3', [status, request_id, lenderId]);
+
+        if (updateRequestResult.rowCount === 0) {
+            return res.status(404).json({ error: 'Exchange request not found or not owned by the lender' });
+        }
+
+        // If the request is accepted, update book status to false (unavailable)
+        if (status === 'Accepted') {
+            const updateBookStatusResult = await client.query('UPDATE books SET availability_status = false WHERE id = (SELECT book_id FROM exchange_requests WHERE request_id = $1) AND lender_id = $2', [request_id, lenderId]);
+
+            if (updateBookStatusResult.rowCount === 0) {
+                return res.status(404).json({ error: 'Book not found or not owned by the lender' });
+            }
+        }
+
+        res.status(200).json({ message: 'Exchange request status and book status updated successfully' });
+    } catch (error) {
+        console.error('Error updating exchange request and book status:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 
 
 
