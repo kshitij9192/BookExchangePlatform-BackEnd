@@ -276,6 +276,29 @@ app.put('/:username/update-request-and-book-status', async (req, res) => {
     }
 });
 
+app.put('/edit-book/:bookId', async (req, res) => {
+    const bookId = req.params.bookId;
+    const { title, author, genre } = req.body;
+
+    try {
+        // Execute SQL UPDATE statement to edit book details
+        const result = await client.query(
+            'UPDATE books SET title = $1, author = $2, genre = $3 WHERE id = $4 RETURNING *',
+            [title, author, genre, bookId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Book not found' });
+        }
+
+        const updatedBook = result.rows[0];
+        res.status(200).json(updatedBook);
+    } catch (error) {
+        console.error('Error editing book:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 
 
 
